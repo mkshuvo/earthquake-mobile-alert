@@ -1,13 +1,77 @@
 import { Alert, Platform } from 'react-native';
 import { EarthquakeEvent, NotificationSettings } from '../types/earthquake';
+// MQTT client for push notifications
+import mqtt from 'react-native-paho-mqtt';
 
 class NotificationService {
+  private mqttClient: any = null;
+  private isConnected: boolean = false;
+
+  constructor() {
+    // Initialize MQTT client
+    this.initializeMQTT();
+  }
+
+  private initializeMQTT(): void {
+    try {
+      // MQTT client will be initialized when connecting
+      console.log('MQTT client initialized');
+    } catch (error) {
+      console.error('Error initializing MQTT client:', error);
+    }
+  }
+
   async requestNotificationPermission(): Promise<boolean> {
-    // For now, we'll use basic Alert notifications
+    // Request permissions for push notifications
     // In a production app, you would integrate with:
-    // - @react-native-firebase/messaging for push notifications
     // - react-native-push-notification for local notifications
     return true;
+  }
+
+  async connectToMQTT(brokerUrl: string, clientId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      try {
+        this.mqttClient = mqtt.connect(brokerUrl, {
+          clientId: clientId,
+          clean: true,
+          connectTimeout: 4000,
+          username: 'earthquake_user',
+          password: 'earthquake_pass',
+          reconnectPeriod: 1000,
+        });
+
+        this.mqttClient.on('connect', () => {
+          console.log('Connected to MQTT broker');
+          this.isConnected = true;
+          resolve();
+        });
+
+        this.mqttClient.on('error', (error: any) => {
+          console.error('MQTT connection error:', error);
+          this.isConnected = false;
+          reject(error);
+        });
+
+        this.mqttClient.on('message', (topic: string, message: any) => {
+          this.handleMQTTMessage(topic, message);
+        });
+
+        // Subscribe to earthquake notification topics
+        this.mqttClient.on('connect', () => {
+          this.mqttClient.subscribe('earthquake/alert/critical', (err: any) => {
+            if (err) console.error('Subscription error:', err);
+          });
+          this.mqttClient.subscribe('earthquake/alert/high', (err: any) => {
+            if (err) console.error('Subscription error:', err);
+          });
+          this.mqttClient.subscribe('earthquake/alert/medium', (err: any) => {
+            if (err) console.error('Subscription error:', err);
+          });
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
   }
 
   async showEarthquakeAlert(earthquake: EarthquakeEvent, settings: NotificationSettings): Promise<void> {
@@ -113,6 +177,44 @@ class NotificationService {
     // Navigate to earthquake details screen
     // For now, just log the action
     console.log(`Opening details for earthquake: ${earthquake.id}`);
+  }
+
+  private handleMQTTMessage(topic: string, message: any): void {
+    try {
+      const earthquakeData = JSON.parse(message.toString());
+      const { title, body, data } = earthquakeData;
+      
+      // Show notification based on topic priority
+      const priority = topic.split('/').pop() || 'medium'; // Extract priority from topic
+      
+      // For critical and high priority, show immediate alert
+      if (priority === 'critical' || priority === 'high') {
+        Alert.alert(
+          title,
+          body,
+          [
+            {
+              text: 'Dismiss',
+              style: 'cancel',
+            },
+            {
+              text: 'View Details',
+              onPress: () => this.openEarthquakeDetails(data),
+            },
+          ],
+          { cancelable: true }
+        );
+      } else {
+        // For medium and low priority, show as banner notification
+        console.log(`Earthquake notification: ${title} - ${body}`);
+      }
+      
+      // Trigger haptic feedback based on priority
+      this.triggerVibration(priority as 'low' | 'medium' | 'high' | 'critical');
+      
+    } catch (error) {
+      console.error('Error handling MQTT message:', error);
+    }
   }
 
   async scheduleLocationBasedCheck(): Promise<void> {
