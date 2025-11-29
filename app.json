@@ -1,42 +1,24 @@
 {
+  "name": "earthquake-mobile-alert",
+  "displayName": "Earthquake Alert",
   "expo": {
-    "name": "earthquake-mobile-alert",
-    "slug": "earthquake-mobile-alert",
+    "name": "Earthquake Alert",
+    "slug": "earthquake-alert",
     "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "earthquakemobilealert",
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "scheme": "earthquake-alert",
+    "assetBundlePatterns": ["**/*"],
+    "plugins": ["expo-font"],
     "ios": {
-      "supportsTablet": true
+      "supportsTabletMode": true,
+      "bundleIdentifier": "com.earthquakealert.app"
     },
     "android": {
+      "package": "com.earthquakealert.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#17a2b8"
+      }
     },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
-    },
-    "plugins": [
-      "expo-router",
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
-        }
-      ]
-    ],
-    "experiments": {
-      "typedRoutes": true
-    }
+    "web": {}
   }
 }
