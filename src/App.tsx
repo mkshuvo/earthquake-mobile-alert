@@ -1,3 +1,4 @@
+import * as Location from 'expo-location';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -9,11 +10,13 @@ import {
   Text,
   View,
 } from 'react-native';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { BottomNavigation, TabName } from './components/BottomNavigation';
 import { EarthquakeCard } from './components/EarthquakeCard';
 import { EarthquakeMap } from './components/EarthquakeMap';
 import { EarthquakeMapWeb } from './components/EarthquakeMapWeb';
 import { Header } from './components/Header';
+import './polyfills';
 import { earthquakeService } from './services/earthquakeService';
 import { useEarthquakeStore } from './store/earthquakeStore';
 
@@ -33,13 +36,34 @@ const App: React.FC = () => {
     isLoading,
     isConnected,
     setConnected,
+    setUserLocation,
   } = useEarthquakeStore();
 
   // Initialize data on app load
   useEffect(() => {
     loadInitialData();
     connectWebSocket();
+    requestLocationPermission();
   }, []);
+
+  const requestLocationPermission = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.warn('Permission to access location was denied');
+        return;
+      }
+
+      const currentLocation = await Location.getCurrentPositionAsync({});
+      setUserLocation({
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+      });
+      console.log('[App] User location set:', currentLocation.coords);
+    } catch (error) {
+      console.error('Error getting location:', error);
+    }
+  };
 
   const loadInitialData = async () => {
     try {
@@ -147,16 +171,40 @@ const App: React.FC = () => {
   const renderLocationBanner = () => {
     if (!filteredEarthquakes.length) return null;
     const nearest = filteredEarthquakes[0]; // Sorted by proximity
+    const magnitudeColor = getMagnitudeColor(nearest.magnitude);
+    
     return (
       <View style={styles.locationBanner}>
-        <View style={styles.bannerContent}>
-          <View style={[styles.magnitudeCircle, { backgroundColor: getMagnitudeColor(nearest.magnitude) }]}>
-            <Text style={styles.magnitudeText}>{nearest.magnitude.toFixed(1)}</Text>
-          </View>
-          <View style={styles.bannerInfo}>
-            <Text style={styles.bannerLocation}>{nearest.location.place}</Text>
-            <Text style={styles.bannerMagnitude}>{nearest.magnitude >= 5.5 ? '🚨 HIGH RISK' : 'Monitor'}</Text>
-            <Text style={styles.bannerDistance}>Depth: {nearest.depth.toFixed(1)} km</Text>
+        <View style={[styles.bannerContainer, { shadowColor: magnitudeColor }]}>
+          {/* Left Color Bar */}
+          <View style={[styles.leftBar, { backgroundColor: magnitudeColor }]} />
+          
+          <View style={styles.bannerContent}>
+            <View style={[styles.magnitudeCircle, { backgroundColor: magnitudeColor }]}>
+              {nearest.magnitude >= 8.0 ? (
+                <MaterialCommunityIcons name="alert-octagram" size={36} color="white" />
+              ) : (
+                <Text style={styles.magnitudeText}>{nearest.magnitude.toFixed(1)}</Text>
+              )}
+            </View>
+            <View style={styles.bannerInfo}>
+              <Text 
+                style={styles.bannerLocation} 
+                numberOfLines={2} 
+                ellipsizeMode="tail"
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+              >
+                {nearest.location.place}
+              </Text>
+              <View style={styles.bannerStatsRow}>
+                <Text style={[styles.bannerMagnitude, { color: magnitudeColor }]}>
+                  {nearest.magnitude >= 5.5 ? '🚨 HIGH RISK' : 'Monitor'}
+                </Text>
+                <Text style={styles.bannerDivider}>•</Text>
+                <Text style={styles.bannerDistance}>Depth: {nearest.depth.toFixed(1)} km</Text>
+              </View>
+            </View>
           </View>
         </View>
       </View>
@@ -164,10 +212,11 @@ const App: React.FC = () => {
   };
 
   const getMagnitudeColor = (magnitude: number): string => {
-    if (magnitude >= 6.0) return '#FF3B30';
-    if (magnitude >= 5.0) return '#FF9500';
-    if (magnitude >= 4.0) return '#FFCC00';
-    return '#FFEB3B';
+    if (magnitude >= 8.0) return '#8B0000'; // Blood Dark Red
+    if (magnitude >= 6.0) return '#F44336'; // Red
+    if (magnitude >= 4.0) return '#FF9800'; // Orange
+    if (magnitude >= 3.0) return '#2196F3'; // Blue
+    return '#4CAF50'; // Green
   };
 
   return (
@@ -215,6 +264,9 @@ const App: React.FC = () => {
               </View>
             )}
           </View>
+          
+          {/* Latest Earthquake Banner Below Map */}
+          {renderLocationBanner()}
         </View>
       ) : activeTab === 'recent' ? (
         <View style={styles.content}>
@@ -334,46 +386,68 @@ const styles = StyleSheet.create({
     zIndex: 999,
   },
   locationBanner: {
-    backgroundColor: '#f8f9fa',
-    borderBottomWidth: 2,
-    borderBottomColor: '#e0e0e0',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    position: 'absolute',
+    bottom: 30,
+    left: 18,
+    right: 18,
+    zIndex: 10,
+  },
+  bannerContainer: {
+    backgroundColor: 'white',
+    borderRadius: 18,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    elevation: 15,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+  },
+  leftBar: {
+    width: 12,
   },
   bannerContent: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    padding: 24,
+    gap: 24,
   },
   magnitudeCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     justifyContent: 'center',
     alignItems: 'center',
   },
   magnitudeText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#fff',
+    fontSize: 33,
+    fontWeight: 'bold',
+    color: 'white',
   },
   bannerInfo: {
     flex: 1,
+    justifyContent: 'center',
   },
   bannerLocation: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 27,
+    fontWeight: 'bold',
     color: '#333',
-    marginBottom: 4,
+    marginBottom: 9,
+  },
+  bannerStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   bannerMagnitude: {
-    fontSize: 12,
+    fontSize: 21,
     fontWeight: '700',
-    color: '#ff6b6b',
-    marginBottom: 2,
+  },
+  bannerDivider: {
+    marginHorizontal: 8,
+    color: '#ccc',
   },
   bannerDistance: {
-    fontSize: 11,
+    fontSize: 21,
     color: '#666',
   },
   listContainerFull: {

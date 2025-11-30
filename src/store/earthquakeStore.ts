@@ -16,6 +16,7 @@ export interface EarthquakeEvent {
   tsunami: number;
   createdAt: string;
   updatedAt: string;
+  distance?: number;
 }
 
 export interface EarthquakeStore {
@@ -24,6 +25,8 @@ export interface EarthquakeStore {
   selectedEarthquake: EarthquakeEvent | null;
   isLoading: boolean;
   error: string | null;
+  lastUpdate: Date | null;
+  connectionStatus: 'connected' | 'disconnected' | 'connecting';
   userLocation: { latitude: number; longitude: number } | null;
   mapRegion: {
     latitude: number;
@@ -50,6 +53,7 @@ export interface EarthquakeStore {
   setFilters: (filters: Partial<EarthquakeStore['filters']>) => void;
   filterEarthquakes: () => void;
   setConnected: (connected: boolean) => void;
+  setConnectionStatus: (status: 'connected' | 'disconnected' | 'connecting') => void;
   reset: () => void;
 }
 
@@ -76,12 +80,14 @@ export const useEarthquakeStore = create<EarthquakeStore>((set, get) => ({
   mapRegion: initialMapRegion,
   filters: initialFilters,
   isConnected: false,
+  lastUpdate: null,
+  connectionStatus: 'disconnected',
 
   setEarthquakes: (earthquakes) =>
     set((state) => {
       const updated = { earthquakes };
       const filtered = applyFilters(earthquakes, state.filters);
-      return { ...updated, filteredEarthquakes: filtered };
+      return { ...updated, filteredEarthquakes: filtered, lastUpdate: new Date() };
     }),
 
   addEarthquake: (earthquake) =>
@@ -92,6 +98,7 @@ export const useEarthquakeStore = create<EarthquakeStore>((set, get) => ({
         earthquakes,
         filteredEarthquakes: filtered,
         selectedEarthquake: earthquake,
+        lastUpdate: new Date(),
       };
     }),
 
@@ -102,31 +109,25 @@ export const useEarthquakeStore = create<EarthquakeStore>((set, get) => ({
 
   setError: (error) => set(() => ({ error })),
 
-  setUserLocation: (location) =>
-    set(() => ({
-      userLocation: location,
-      mapRegion: {
-        latitude: location.latitude,
-        longitude: location.longitude,
-        latitudeDelta: 10,
-        longitudeDelta: 10,
-      },
-    })),
+  setUserLocation: (location) => set(() => ({ userLocation: location })),
 
   setMapRegion: (region) => set(() => ({ mapRegion: region })),
 
   setFilters: (newFilters) =>
+    set((state) => {
+      const filters = { ...state.filters, ...newFilters };
+      const filtered = applyFilters(state.earthquakes, filters);
+      return { filters, filteredEarthquakes: filtered };
+    }),
+
+  filterEarthquakes: () =>
     set((state) => ({
-      filters: { ...state.filters, ...newFilters },
+      filteredEarthquakes: applyFilters(state.earthquakes, state.filters),
     })),
 
-  filterEarthquakes: () => {
-    const state = get();
-    const filtered = applyFilters(state.earthquakes, state.filters);
-    set(() => ({ filteredEarthquakes: filtered }));
-  },
-
   setConnected: (connected) => set(() => ({ isConnected: connected })),
+
+  setConnectionStatus: (status) => set(() => ({ connectionStatus: status })),
 
   reset: () =>
     set(() => ({
@@ -136,6 +137,9 @@ export const useEarthquakeStore = create<EarthquakeStore>((set, get) => ({
       isLoading: false,
       error: null,
       filters: initialFilters,
+      mapRegion: initialMapRegion,
+      lastUpdate: null,
+      connectionStatus: 'disconnected',
     })),
 }));
 

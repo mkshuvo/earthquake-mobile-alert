@@ -17,16 +17,17 @@ export const EarthquakeMapWeb: React.FC<EarthquakeMapWebProps> = ({ onEarthquake
 
   // Get user location on mount
   useEffect(() => {
-    if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
+    const _navigator = window.navigator;
+    if (typeof _navigator !== 'undefined' && 'geolocation' in _navigator) {
+      _navigator.geolocation.getCurrentPosition(
+        (position: any) => {
           userLocationRef.current = {
             lat: position.coords.latitude,
             lng: position.coords.longitude,
           };
           console.log('[EarthquakeMapWeb] User location:', position.coords.latitude, position.coords.longitude);
         },
-        (error) => {
+        (error: any) => {
           console.warn('[EarthquakeMapWeb] Failed to get user location:', error.message);
         }
       );
@@ -59,22 +60,42 @@ export const EarthquakeMapWeb: React.FC<EarthquakeMapWebProps> = ({ onEarthquake
       const L = (window as any).L;
       if (!L || !mapRef.current) return;
 
-      // Initialize map centered on user location, or first earthquake, or world
+      // Initialize map centered on user location (PRIORITY), or first earthquake, or world
       let center: [number, number];
+      let zoom = 5;
+
       if (userLocationRef.current) {
         center = [userLocationRef.current.lat, userLocationRef.current.lng];
+        zoom = 7; // Closer zoom for user location
       } else if (filteredEarthquakes.length > 0) {
         center = [filteredEarthquakes[0].location.latitude, filteredEarthquakes[0].location.longitude];
       } else {
         center = [20, 0];
       }
 
-      const map = L.map(mapRef.current).setView(center, 5);
+      // Create map if it doesn't exist
+      if (!mapInstanceRef.current) {
+        mapInstanceRef.current = L.map(mapRef.current).setView(center, zoom);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap contributors',
+          maxZoom: 19,
+        }).addTo(mapInstanceRef.current);
+      } else {
+        // Update view if map exists and user location just became available (Sticky Lock)
+        if (userLocationRef.current) {
+             mapInstanceRef.current.setView([userLocationRef.current.lat, userLocationRef.current.lng], 7);
+        }
+      }
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 19,
-      }).addTo(map);
+      const map = mapInstanceRef.current;
+
+      // Clear existing markers (except tiles)
+      map.eachLayer((layer: any) => {
+        if (layer instanceof L.Marker || layer instanceof L.Circle || layer instanceof L.CircleMarker) {
+          map.removeLayer(layer);
+        }
+      });
 
       // Add user location marker if available
       if (userLocationRef.current) {
@@ -165,9 +186,20 @@ export const EarthquakeMapWeb: React.FC<EarthquakeMapWebProps> = ({ onEarthquake
 
   const getMagnitudeColor = (magnitude: number): string => {
     if (magnitude >= 6.0) return '#FF3B30';
-    if (magnitude >= 5.0) return '#FF9500';
+    if (magnitude >= 5.0) return '#FFFFFF';
     if (magnitude >= 4.0) return '#FFCC00';
     return '#FFEB3B';
+  };
+
+  const handleLocateMe = () => {
+    if (userLocationRef.current && mapInstanceRef.current) {
+      mapInstanceRef.current.setView(
+        [userLocationRef.current.lat, userLocationRef.current.lng], 
+        7 // Zoom level
+      );
+    } else if (!userLocationRef.current) {
+      alert("Location not available yet. Please allow location access.");
+    }
   };
 
   return (
@@ -180,6 +212,30 @@ export const EarthquakeMapWeb: React.FC<EarthquakeMapWebProps> = ({ onEarthquake
           backgroundColor: '#f0f0f0',
         }}
       />
+      {/* Locate Me Button Overlay */}
+      <div 
+        onClick={handleLocateMe}
+        style={{
+          position: 'absolute',
+          top: 10,
+          right: 10,
+          zIndex: 1000,
+          backgroundColor: 'white',
+          padding: '8px',
+          borderRadius: '4px',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          border: '2px solid rgba(0,0,0,0.2)'
+        }}
+        title="Locate Me"
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 8C9.79 8 8 9.79 8 12C8 14.21 9.79 16 12 16C14.21 16 16 14.21 16 12C16 9.79 14.21 8 12 8ZM20.94 11C20.48 6.83 17.17 3.52 13 3.06V1H11V3.06C6.83 3.52 3.52 6.83 3.06 11H1V13H3.06C3.52 17.17 6.83 20.48 11 20.94V23H13V20.94C17.17 20.48 20.48 17.17 20.94 13H23V11H20.94ZM12 19C8.13 19 5 15.87 5 12C5 8.13 8.13 5 12 5C15.87 5 19 8.13 19 12C19 15.87 15.87 19 12 19Z" fill="#333"/>
+        </svg>
+      </div>
     </View>
   );
 };

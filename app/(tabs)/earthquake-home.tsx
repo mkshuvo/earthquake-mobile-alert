@@ -1,12 +1,17 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { useEarthquakeStore } from '@/store/earthquakeStore';
-import earthquakeService from '@/services/earthquakeService';
+import { earthquakeService } from '@/services/earthquakeService';
 import locationService from '@/services/locationService';
 import notificationService from '@/services/notificationService';
+import { useEarthquakeStore } from '@/store/earthquakeStore';
+import { useEffect, useState } from 'react';
+import { Alert, RefreshControl, ScrollView, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+// Truncate magnitude to 1 decimal place (no rounding)
+const truncateToOneDecimal = (num: number): number => {
+  return Math.floor(num * 10) / 10;
+};
 
 export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
@@ -120,8 +125,9 @@ export default function HomeScreen() {
     }
   };
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const formatTime = (date: Date | string) => {
+    const d = typeof date === 'string' ? new Date(date) : date;
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   const getMagnitudeColor = (magnitude: number) => {
@@ -192,7 +198,7 @@ export default function HomeScreen() {
                     { color: getMagnitudeColor(earthquake.magnitude) }
                   ]}
                 >
-                  M{earthquake.magnitude.toFixed(1)}
+                  M{truncateToOneDecimal(earthquake.magnitude).toFixed(1)}
                 </ThemedText>
                 <ThemedText style={styles.time}>
                   {formatTime(earthquake.timestamp)}
@@ -223,6 +229,16 @@ export default function HomeScreen() {
           </ThemedView>
         )}
       </ScrollView>
+
+      {/* Latest Earthquake Banner at Bottom */}
+      {earthquakes.length > 0 && (
+        <ThemedView style={styles.latestBanner}>
+          <ThemedText type="defaultSemiBold" style={styles.bannerTitle}>Latest: {earthquakes[0].location.place}</ThemedText>
+          <ThemedText style={[styles.bannerMagnitude, { color: getMagnitudeColor(earthquakes[0].magnitude) }]}>
+            M{truncateToOneDecimal(earthquakes[0].magnitude).toFixed(1)}
+          </ThemedText>
+        </ThemedView>
+      )}
     </SafeAreaView>
   );
 }
@@ -334,5 +350,24 @@ const styles = StyleSheet.create({
   loadingContainer: {
     padding: 20,
     alignItems: 'center',
+  },
+  latestBanner: {
+    backgroundColor: '#1E40AF',
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#3B82F6',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  bannerTitle: {
+    color: '#E5E7EB',
+    fontSize: 14,
+    flex: 1,
+  },
+  bannerMagnitude: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginLeft: 16,
   },
 });

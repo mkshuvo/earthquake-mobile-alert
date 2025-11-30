@@ -26,10 +26,11 @@ export const EarthquakeCard: React.FC<EarthquakeCardProps> = ({
   }
 
   const getMagnitudeColor = (magnitude: number): string => {
-    if (magnitude >= 6.0) return '#FF3B30';
-    if (magnitude >= 5.0) return '#FF9500';
-    if (magnitude >= 4.0) return '#FFCC00';
-    return '#FFEB3B';
+    if (magnitude >= 8.0) return '#8B0000'; // Blood Dark Red
+    if (magnitude >= 6.0) return '#F44336'; // Red
+    if (magnitude >= 4.0) return '#FF9800'; // Orange
+    if (magnitude >= 3.0) return '#2196F3'; // Blue
+    return '#4CAF50'; // Green
   };
 
   const timeAgo = moment(earthquake.timestamp).fromNow();
@@ -52,9 +53,13 @@ export const EarthquakeCard: React.FC<EarthquakeCardProps> = ({
             { backgroundColor: getMagnitudeColor(earthquake.magnitude) },
           ]}
         >
-          <Text style={styles.magnitudeValue}>
-            {(earthquake.magnitude).toFixed(1)}
-          </Text>
+          {earthquake.magnitude >= 8.0 ? (
+            <MaterialCommunityIcons name="alert-octagram" size={20} color="white" />
+          ) : (
+            <Text style={styles.magnitudeValue}>
+              {(earthquake.magnitude).toFixed(1)}
+            </Text>
+          )}
         </View>
 
         {/* Content */}

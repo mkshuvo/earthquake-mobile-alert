@@ -58,6 +58,16 @@ export const EarthquakeMap: React.FC<EarthquakeMapProps> = ({
         (position: any) => {
           const { latitude, longitude } = position.coords;
           setUserLocation({ latitude, longitude });
+          
+          // Center map on user location (Sticky Lock)
+          if (mapRef.current) {
+            mapRef.current.animateToRegion({
+              latitude,
+              longitude,
+              latitudeDelta: 5, // Zoomed in closer (was 10)
+              longitudeDelta: 5,
+            }, 1000); // Animation duration
+          }
         },
         (error: any) => {
           console.log('Location error:', error);
@@ -84,10 +94,11 @@ export const EarthquakeMap: React.FC<EarthquakeMapProps> = ({
   };
 
   const getMagnitudeColor = (magnitude: number): string => {
-    if (magnitude >= 6.0) return '#FF3B30'; // Red for high
-    if (magnitude >= 5.0) return '#FF9500'; // Orange
-    if (magnitude >= 4.0) return '#FFCC00'; // Yellow
-    return '#FFEB3B'; // Light yellow
+    if (magnitude >= 8.0) return '#8B0000'; // Blood Dark Red
+    if (magnitude >= 6.0) return '#F44336'; // Red
+    if (magnitude >= 4.0) return '#FF9800'; // Orange
+    if (magnitude >= 3.0) return '#2196F3'; // Blue
+    return '#4CAF50'; // Green
   };
 
   const getCircleRadius = (magnitude: number): number => {

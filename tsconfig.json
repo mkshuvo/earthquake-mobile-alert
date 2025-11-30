@@ -33,7 +33,8 @@
   },
   "include": [
     "index.js",
-    "src/**/*"
+    "src/**/*",
+    "app/**/*"
   ],
   "exclude": [
     "node_modules",
