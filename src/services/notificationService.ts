@@ -8,7 +8,7 @@ export const notificationService = {
 
   scheduleLocationBasedCheck: async () => {
     // Stub implementation
-    console.log('Scheduled location based check');
+    // Scheduled location based check
   },
 };
 

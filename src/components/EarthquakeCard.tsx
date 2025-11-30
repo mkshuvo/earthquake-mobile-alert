@@ -8,7 +8,7 @@ import {
     View,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { EarthquakeEvent } from '../store/earthquakeStore';
+import { EarthquakeEvent, formatMagnitude } from '../store/earthquakeStore';
 
 const { width } = Dimensions.get('window');
 
@@ -57,7 +57,7 @@ export const EarthquakeCard: React.FC<EarthquakeCardProps> = ({
             <MaterialCommunityIcons name="alert-octagram" size={20} color="white" />
           ) : (
             <Text style={styles.magnitudeValue}>
-              {(earthquake.magnitude).toFixed(1)}
+              {formatMagnitude(earthquake.magnitude)}
             </Text>
           )}
         </View>

@@ -1,5 +1,13 @@
-import moment from 'moment';
 import { create } from 'zustand';
+
+/**
+ * Formats a magnitude value with truncation to 1 decimal place (no rounding).
+ * Example: 3.16 -> "3.1", 3.12 -> "3.1", 3.0 -> "3.0"
+ */
+export const formatMagnitude = (magnitude: number | null | undefined): string => {
+  if (magnitude === null || magnitude === undefined) return '0.0';
+  return (Math.trunc(magnitude * 10) / 10).toFixed(1);
+};
 
 export interface EarthquakeEvent {
   id: string;
@@ -16,170 +24,138 @@ export interface EarthquakeEvent {
   tsunami: number;
   createdAt: string;
   updatedAt: string;
-  distance?: number;
 }
 
-export interface EarthquakeStore {
+export interface Region {
+  latitude: number;
+  longitude: number;
+  latitudeDelta: number;
+  longitudeDelta: number;
+}
+
+export interface EarthquakeFilters {
+  minMagnitude: number;
+  maxMagnitude: number;
+  location: string;
+  startDate: string;
+  endDate: string;
+  limit: number;
+}
+
+interface EarthquakeState {
   earthquakes: EarthquakeEvent[];
   filteredEarthquakes: EarthquakeEvent[];
   selectedEarthquake: EarthquakeEvent | null;
   isLoading: boolean;
   error: string | null;
-  lastUpdate: Date | null;
-  connectionStatus: 'connected' | 'disconnected' | 'connecting';
-  userLocation: { latitude: number; longitude: number } | null;
-  mapRegion: {
-    latitude: number;
-    longitude: number;
-    latitudeDelta: number;
-    longitudeDelta: number;
-  };
-  filters: {
-    minMagnitude: number;
-    maxMagnitude: number;
-    location?: string;
-    timeRange: 'all' | '24h' | '7d' | '30d';
-  };
   isConnected: boolean;
+  userLocation: { latitude: number; longitude: number } | null;
+  mapRegion: Region;
+  filters: EarthquakeFilters;
 
-  // Actions
   setEarthquakes: (earthquakes: EarthquakeEvent[]) => void;
   addEarthquake: (earthquake: EarthquakeEvent) => void;
   setSelectedEarthquake: (earthquake: EarthquakeEvent | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
-  setUserLocation: (location: { latitude: number; longitude: number }) => void;
-  setMapRegion: (region: any) => void;
-  setFilters: (filters: Partial<EarthquakeStore['filters']>) => void;
-  filterEarthquakes: () => void;
   setConnected: (connected: boolean) => void;
-  setConnectionStatus: (status: 'connected' | 'disconnected' | 'connecting') => void;
-  reset: () => void;
+  setUserLocation: (location: { latitude: number; longitude: number } | null) => void;
+  setMapRegion: (region: Region) => void;
+  setFilters: (filters: Partial<EarthquakeFilters>) => void;
+  filterEarthquakes: () => void;
 }
 
-const initialFilters = {
-  minMagnitude: 0,
-  maxMagnitude: 10,
-  timeRange: 'all' as const,
-};
-
-const initialMapRegion = {
-  latitude: 20.0,
-  longitude: 120.0,
-  latitudeDelta: 60,
-  longitudeDelta: 60,
-};
-
-export const useEarthquakeStore = create<EarthquakeStore>((set, get) => ({
+export const useEarthquakeStore = create<EarthquakeState>((set) => ({
   earthquakes: [],
   filteredEarthquakes: [],
   selectedEarthquake: null,
   isLoading: false,
   error: null,
-  userLocation: null,
-  mapRegion: initialMapRegion,
-  filters: initialFilters,
   isConnected: false,
-  lastUpdate: null,
-  connectionStatus: 'disconnected',
+  userLocation: null,
+  mapRegion: {
+    latitude: 20,
+    longitude: 0,
+    latitudeDelta: 100,
+    longitudeDelta: 100,
+  },
+  filters: {
+    minMagnitude: 0,
+    maxMagnitude: 10,
+    location: '',
+    startDate: '',
+    endDate: '',
+    limit: 100,
+  },
 
-  setEarthquakes: (earthquakes) =>
-    set((state) => {
-      const updated = { earthquakes };
-      const filtered = applyFilters(earthquakes, state.filters);
-      return { ...updated, filteredEarthquakes: filtered, lastUpdate: new Date() };
-    }),
+  setEarthquakes: (earthquakes) => set((state) => {
+    // Deduplicate incoming earthquakes based on ID
+    const uniqueEarthquakes = Array.from(
+      new Map(earthquakes.map(eq => [eq.id, eq])).values()
+    );
 
-  addEarthquake: (earthquake) =>
-    set((state) => {
-      const earthquakes = [earthquake, ...state.earthquakes].slice(0, 500);
-      const filtered = applyFilters(earthquakes, state.filters);
-      return {
-        earthquakes,
-        filteredEarthquakes: filtered,
-        selectedEarthquake: earthquake,
-        lastUpdate: new Date(),
-      };
-    }),
+    // Apply current filters when setting earthquakes
+    const { minMagnitude, maxMagnitude, location } = state.filters;
+    const filtered = uniqueEarthquakes.filter((eq) => {
+      const matchesMag = eq.magnitude >= minMagnitude && eq.magnitude <= maxMagnitude;
+      const matchesLoc = location ? eq.location.place.toLowerCase().includes(location.toLowerCase()) : true;
+      return matchesMag && matchesLoc;
+    });
+    
+    return { 
+      earthquakes: uniqueEarthquakes, 
+      filteredEarthquakes: filtered 
+    };
+  }),
+  
+  addEarthquake: (earthquake) => set((state) => {
+    const index = state.earthquakes.findIndex((eq) => eq.id === earthquake.id);
+    
+    let newEarthquakes;
+    if (index !== -1) {
+      // Update existing earthquake with new data
+      newEarthquakes = [...state.earthquakes];
+      newEarthquakes[index] = earthquake;
+    } else {
+      // Add new earthquake
+      newEarthquakes = [earthquake, ...state.earthquakes];
+    }
 
-  setSelectedEarthquake: (earthquake) =>
-    set(() => ({ selectedEarthquake: earthquake })),
+    newEarthquakes = newEarthquakes
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      
+    // Apply filters to new list
+    const { minMagnitude, maxMagnitude, location } = state.filters;
+    const filtered = newEarthquakes.filter((eq) => {
+      const matchesMag = eq.magnitude >= minMagnitude && eq.magnitude <= maxMagnitude;
+      const matchesLoc = location ? eq.location.place.toLowerCase().includes(location.toLowerCase()) : true;
+      return matchesMag && matchesLoc;
+    });
 
-  setLoading: (loading) => set(() => ({ isLoading: loading })),
+    return { 
+      earthquakes: newEarthquakes,
+      filteredEarthquakes: filtered 
+    };
+  }),
 
-  setError: (error) => set(() => ({ error })),
-
-  setUserLocation: (location) => set(() => ({ userLocation: location })),
-
-  setMapRegion: (region) => set(() => ({ mapRegion: region })),
-
-  setFilters: (newFilters) =>
-    set((state) => {
-      const filters = { ...state.filters, ...newFilters };
-      const filtered = applyFilters(state.earthquakes, filters);
-      return { filters, filteredEarthquakes: filtered };
-    }),
-
-  filterEarthquakes: () =>
-    set((state) => ({
-      filteredEarthquakes: applyFilters(state.earthquakes, state.filters),
-    })),
-
-  setConnected: (connected) => set(() => ({ isConnected: connected })),
-
-  setConnectionStatus: (status) => set(() => ({ connectionStatus: status })),
-
-  reset: () =>
-    set(() => ({
-      earthquakes: [],
-      filteredEarthquakes: [],
-      selectedEarthquake: null,
-      isLoading: false,
-      error: null,
-      filters: initialFilters,
-      mapRegion: initialMapRegion,
-      lastUpdate: null,
-      connectionStatus: 'disconnected',
-    })),
+  setSelectedEarthquake: (earthquake) => set({ selectedEarthquake: earthquake }),
+  setLoading: (isLoading) => set({ isLoading }),
+  setError: (error) => set({ error }),
+  setConnected: (isConnected) => set({ isConnected }),
+  setUserLocation: (userLocation) => set({ userLocation }),
+  setMapRegion: (mapRegion) => set({ mapRegion }),
+  
+  setFilters: (newFilters) => set((state) => ({
+    filters: { ...state.filters, ...newFilters }
+  })),
+  
+  filterEarthquakes: () => set((state) => {
+    const { minMagnitude, maxMagnitude, location } = state.filters;
+    const filtered = state.earthquakes.filter((eq) => {
+      const matchesMag = eq.magnitude >= minMagnitude && eq.magnitude <= maxMagnitude;
+      const matchesLoc = location ? eq.location.place.toLowerCase().includes(location.toLowerCase()) : true;
+      return matchesMag && matchesLoc;
+    });
+    return { filteredEarthquakes: filtered };
+  }),
 }));
-
-// Helper function to apply filters
-function applyFilters(
-  earthquakes: EarthquakeEvent[],
-  filters: EarthquakeStore['filters'],
-): EarthquakeEvent[] {
-  return earthquakes.filter((eq) => {
-    // Magnitude filter
-    if (eq.magnitude < filters.minMagnitude || eq.magnitude > filters.maxMagnitude) {
-      return false;
-    }
-
-    // Location filter
-    if (filters.location) {
-      const searchTerm = filters.location.toLowerCase();
-      if (
-        !eq.location.place.toLowerCase().includes(searchTerm)
-      ) {
-        return false;
-      }
-    }
-
-    // Time range filter
-    if (filters.timeRange !== 'all') {
-      const now = moment();
-      const eventTime = moment(eq.timestamp);
-      const hoursAgo =
-        filters.timeRange === '24h'
-          ? 24
-          : filters.timeRange === '7d'
-            ? 24 * 7
-            : 24 * 30;
-
-      if (now.diff(eventTime, 'hours') > hoursAgo) {
-        return false;
-      }
-    }
-
-    return true;
-  });
-}

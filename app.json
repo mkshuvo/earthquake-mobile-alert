@@ -6,8 +6,12 @@
     "slug": "earthquake-alert",
     "version": "1.0.0",
     "scheme": "earthquake-alert",
-    "assetBundlePatterns": ["**/*"],
-    "plugins": ["expo-font"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      "expo-font"
+    ],
     "ios": {
       "supportsTabletMode": true,
       "bundleIdentifier": "com.earthquakealert.app"

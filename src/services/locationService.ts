@@ -6,7 +6,7 @@ export const locationService = {
       const { status } = await Location.requestForegroundPermissionsAsync();
       return status === 'granted';
     } catch (error) {
-      console.error('Error requesting location permission:', error);
+      // Error requesting location permission
       return false;
     }
   },
@@ -19,7 +19,7 @@ export const locationService = {
         longitude: location.coords.longitude,
       };
     } catch (error) {
-      console.error('Error getting current location:', error);
+      // Error getting current location
       throw error;
     }
   },

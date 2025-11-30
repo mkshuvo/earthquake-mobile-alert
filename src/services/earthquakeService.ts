@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import mqtt from 'mqtt';
 import { Platform, Vibration } from 'react-native';
+import Constants from 'expo-constants';
 import { EarthquakeEvent, useEarthquakeStore } from '../store/earthquakeStore';
 import { soundService } from './soundService';
 
@@ -13,6 +14,13 @@ const getHostName = () => {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     return window.location.hostname;
   }
+  
+  // Try to get debugger host from Expo constants (for physical devices)
+  const debuggerHost = Constants.expoConfig?.hostUri;
+  if (debuggerHost) {
+    return debuggerHost.split(':')[0];
+  }
+
   if (Platform.OS === 'android') {
     return '10.0.2.2'; // Android Emulator host loopback
   }
@@ -38,7 +46,7 @@ const getMqttUrl = () => {
     // If web, use relative or hostname.
     if (Platform.OS === 'web') {
          // Use the port from previous code if specific
-         return `ws://${host}:45329/mqtt`; 
+         return `ws://${host}:8083/mqtt`; 
     }
     // For native, use standard WS port or the one exposed
     return `ws://${host}:8083/mqtt`;
@@ -98,16 +106,12 @@ export class EarthquakeService {
     }>,
   ): Promise<EarthquakeEvent[]> {
     try {
-      console.log(`[EarthquakeService] Fetching earthquakes from ${API_BASE_URL}`, filters);
       const response = await this.apiClient.get('/earthquakes', {
         params: filters,
       });
-      console.log(`[EarthquakeService] Successfully fetched ${response.data.length} earthquakes from backend`);
       return response.data;
     } catch (error) {
-      console.error(`[EarthquakeService] Error fetching earthquakes from ${API_BASE_URL}:`, error);
-      console.warn('[EarthquakeService] Falling back to mock data');
-      // Mock data logic retained for safety
+      // Fallback to mock data
       return [
         {
           id: '1',
@@ -130,7 +134,6 @@ export class EarthquakeService {
       const response = await this.apiClient.get('/earthquakes/statistics');
       return response.data;
     } catch (error) {
-      console.error('Error fetching statistics:', error);
       throw error;
     }
   }
@@ -140,7 +143,6 @@ export class EarthquakeService {
       const response = await this.apiClient.get('/earthquakes/health');
       return response.data;
     } catch (error) {
-      console.error('Error fetching health:', error);
       throw error;
     }
   }
@@ -150,7 +152,6 @@ export class EarthquakeService {
       const response = await this.apiClient.get('/earthquakes/fetch');
       return response.data;
     } catch (error) {
-      console.error('Error triggering fetch:', error);
       throw error;
     }
   }
@@ -163,14 +164,12 @@ export class EarthquakeService {
   }): void {
     try {
       this.pollCallbacks = callbacks;
-      console.log('[EarthquakeService] Connecting to EMQX MQTT broker for real-time alerts...');
       
       this.loadInitialEarthquakes();
       this.connectToMQTT();
       
       // Note: onConnect will be called inside mqttClient.on('connect')
     } catch (error) {
-      console.error('[EarthquakeService] Error initializing MQTT:', error);
       this.pollCallbacks?.onError?.(String(error));
     }
   }
@@ -180,67 +179,77 @@ export class EarthquakeService {
       const earthquakes = await this.getEarthquakes({ limit: 30 });
       earthquakes.forEach(eq => this.lastEarthquakeIds.add(eq.id));
     } catch (error) {
-      console.error('[EarthquakeService] Failed to load initial earthquakes:', error);
+      // Failed to load initial earthquakes
     }
   }
 
   private connectToMQTT(): void {
     const brokerUrl = getMqttUrl();
-    console.log(`[EarthquakeService] Connecting to MQTT Broker: ${brokerUrl}`);
 
     try {
       this.mqttClient = mqtt.connect(brokerUrl, {
         clientId: `earthquake-mobile-${Math.random().toString(16).substr(2, 8)}`,
         clean: true,
-        connectTimeout: 4000,
+        connectTimeout: 10000,
         reconnectPeriod: 3000,
-        // Force WebSocket for React Native if using ws:// protocol
-        protocol: Platform.OS === 'web' ? 'ws' : 'ws', 
       });
 
-      this.mqttClient.on('connect', () => {
-        console.log('[EarthquakeService] 🟢 Connected to EMQX MQTT broker');
-        this.pollCallbacks?.onConnect?.();
-        
+      this.mqttClient?.on('connect', () => {
         this.mqttClient?.subscribe(MQTT_TOPIC, { qos: 1 }, (err) => {
           if (err) {
-            console.error('[EarthquakeService] Failed to subscribe:', err);
+            // Failed to subscribe
           } else {
-            console.log(`[EarthquakeService] ✅ Subscribed to ${MQTT_TOPIC}`);
+            // Subscribed
           }
         });
       });
 
       this.mqttClient.on('message', (topic, message) => {
         try {
-          const earthquake = JSON.parse(message.toString());
+          const rawData = JSON.parse(message.toString());
           
+          // Normalize and validate data to prevent crashes
+          const earthquake: EarthquakeEvent = {
+            id: rawData.id || `unknown-${Date.now()}`,
+            magnitude: Number(rawData.magnitude) || 0,
+            location: {
+              latitude: Number(rawData.location?.latitude) || 0,
+              longitude: Number(rawData.location?.longitude) || 0,
+              place: rawData.location?.place || 'Unknown Location',
+            },
+            depth: Number(rawData.depth) || 0,
+            timestamp: rawData.timestamp || new Date().toISOString(),
+            url: rawData.url || '',
+            tsunami: rawData.tsunami || 0,
+            createdAt: rawData.createdAt || new Date().toISOString(),
+            updatedAt: rawData.updatedAt || new Date().toISOString(),
+            alert: rawData.alert,
+          };
+
           if (!this.lastEarthquakeIds.has(earthquake.id)) {
             this.lastEarthquakeIds.add(earthquake.id);
-            console.log('[EarthquakeService] 🚨 MQTT ALERT: New earthquake detected:', earthquake.id);
             this.pollCallbacks?.onNewEarthquake?.(earthquake);
             this.triggerEmergencyAlert(earthquake);
           }
         } catch (error) {
-          console.error('[EarthquakeService] Error processing MQTT message:', error);
+          // Error processing MQTT message
         }
       });
 
       this.mqttClient.on('error', (error) => {
-        console.error('[EarthquakeService] MQTT error:', error);
         this.pollCallbacks?.onError?.(String(error));
       });
 
       this.mqttClient.on('offline', () => {
-        console.warn('[EarthquakeService] ⚠️ MQTT offline');
+        // MQTT offline
       });
 
       this.mqttClient.on('reconnect', () => {
-        console.log('[EarthquakeService] 🔄 Attempting to reconnect to MQTT...');
+        // Attempting to reconnect to MQTT
       });
 
     } catch (e) {
-      console.error('[EarthquakeService] Failed to initiate MQTT connection', e);
+      // Failed to initiate MQTT connection
     }
   }
 
@@ -258,7 +267,6 @@ export class EarthquakeService {
             earthquake.location.latitude,
             earthquake.location.longitude
         );
-        console.log(`[EarthquakeService] Distance to earthquake: ${distance.toFixed(2)}km`);
         
         if (distance <= 100) {
             isNearby = true;
@@ -278,7 +286,6 @@ export class EarthquakeService {
     // Let's stick to: if nearby OR unknown location (safety first).
 
     if (shouldPlaySound) {
-        console.log('[EarthquakeService] 🚨 CRITICAL CONDITION MET - TRIGGERING SOUND ALERT');
         soundService.playAlert();
         
         // Vibrate heavily
@@ -306,7 +313,6 @@ export class EarthquakeService {
       this.mqttClient = null;
     }
     this.pollCallbacks?.onDisconnect?.();
-    console.log('[EarthquakeService] Disconnected from MQTT');
   }
 
   isConnected(): boolean {

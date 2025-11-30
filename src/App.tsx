@@ -1,14 +1,17 @@
 import * as Location from 'expo-location';
+import moment from 'moment';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  LogBox,
   Platform,
   SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
-  View,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { BottomNavigation, TabName } from './components/BottomNavigation';
@@ -18,7 +21,12 @@ import { EarthquakeMapWeb } from './components/EarthquakeMapWeb';
 import { Header } from './components/Header';
 import './polyfills';
 import { earthquakeService } from './services/earthquakeService';
-import { useEarthquakeStore } from './store/earthquakeStore';
+import { formatMagnitude, useEarthquakeStore } from './store/earthquakeStore';
+
+LogBox.ignoreLogs([
+  'Require cycle:', 
+  'Non-serializable values were found in the navigation state',
+]);
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabName>('map');
@@ -50,7 +58,7 @@ const App: React.FC = () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        console.warn('Permission to access location was denied');
+        // Permission denied
         return;
       }
 
@@ -59,9 +67,8 @@ const App: React.FC = () => {
         latitude: currentLocation.coords.latitude,
         longitude: currentLocation.coords.longitude,
       });
-      console.log('[App] User location set:', currentLocation.coords);
     } catch (error) {
-      console.error('Error getting location:', error);
+      // Error getting location
     }
   };
 
@@ -74,7 +81,6 @@ const App: React.FC = () => {
       setEarthquakes(earthquakes);
       setError(null);
     } catch (error) {
-      console.error('Failed to load earthquakes:', error);
       setError('Failed to load earthquake data');
     } finally {
       setLoading(false);
@@ -84,19 +90,15 @@ const App: React.FC = () => {
   const connectWebSocket = () => {
     earthquakeService.connectWebSocket({
       onConnect: () => {
-        console.log('WebSocket connected');
         setConnected(true);
       },
       onDisconnect: () => {
-        console.log('WebSocket disconnected');
         setConnected(false);
       },
       onNewEarthquake: (earthquake) => {
-        console.log('New earthquake:', earthquake);
         addEarthquake(earthquake);
       },
       onError: (error) => {
-        console.error('WebSocket error:', error);
         setError(`Connection error: ${error}`);
       },
     });
@@ -143,6 +145,26 @@ const App: React.FC = () => {
         return (
           <View style={styles.tabContent}>
             <Text style={styles.tabText}>Safety Tips & Emergency Procedures</Text>
+            <TouchableOpacity 
+              style={{ marginTop: 20, padding: 15, backgroundColor: '#F44336', borderRadius: 8 }}
+              onPress={() => {
+                const mockEarthquake = {
+                  id: 'test-' + Date.now(),
+                  magnitude: 7.5,
+                  location: { latitude: 35.0, longitude: 139.0, place: 'TEST ALERT: Tokyo' },
+                  depth: 10,
+                  timestamp: new Date().toISOString(),
+                  tsunami: 0,
+                  url: '',
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                };
+                addEarthquake(mockEarthquake);
+                alert('Test earthquake added!');
+              }}
+            >
+              <Text style={{ color: 'white', fontWeight: 'bold' }}>SIMULATE 7.5M EARTHQUAKE</Text>
+            </TouchableOpacity>
           </View>
         );
       case 'mylog':
@@ -180,29 +202,39 @@ const App: React.FC = () => {
           <View style={[styles.leftBar, { backgroundColor: magnitudeColor }]} />
           
           <View style={styles.bannerContent}>
-            <View style={[styles.magnitudeCircle, { backgroundColor: magnitudeColor }]}>
+            <View style={styles.magnitudeContainer}>
               {nearest.magnitude >= 8.0 ? (
-                <MaterialCommunityIcons name="alert-octagram" size={36} color="white" />
+                <MaterialCommunityIcons name="alert-octagram" size={84} color={magnitudeColor} />
               ) : (
-                <Text style={styles.magnitudeText}>{nearest.magnitude.toFixed(1)}</Text>
+                <Text 
+                  style={[styles.magnitudeText, { color: magnitudeColor }]}
+                  adjustsFontSizeToFit
+                  numberOfLines={1}
+                >
+                  {formatMagnitude(nearest.magnitude)}
+                </Text>
               )}
             </View>
             <View style={styles.bannerInfo}>
               <Text 
                 style={styles.bannerLocation} 
-                numberOfLines={2} 
+                numberOfLines={3} 
                 ellipsizeMode="tail"
                 adjustsFontSizeToFit
-                minimumFontScale={0.8}
+                minimumFontScale={0.6}
               >
                 {nearest.location.place}
               </Text>
               <View style={styles.bannerStatsRow}>
                 <Text style={[styles.bannerMagnitude, { color: magnitudeColor }]}>
-                  {nearest.magnitude >= 5.5 ? '🚨 HIGH RISK' : 'Monitor'}
+                  {nearest.magnitude >= 5.5 ? 'HIGH RISK' : 'Monitor'}
                 </Text>
                 <Text style={styles.bannerDivider}>•</Text>
-                <Text style={styles.bannerDistance}>Depth: {nearest.depth.toFixed(1)} km</Text>
+                <Text style={styles.bannerDistance}>{nearest.depth.toFixed(0)}km depth</Text>
+                <Text style={styles.bannerDivider}>•</Text>
+                <Text style={styles.bannerDistance}>
+                  {moment(nearest.timestamp).fromNow(true).replace(' minutes', 'm').replace(' hours', 'h')} ago
+                </Text>
               </View>
             </View>
           </View>
@@ -236,7 +268,7 @@ const App: React.FC = () => {
           <View style={styles.mapContainerFull}>
             {Platform.OS === 'web' ? (
               <EarthquakeMapWeb
-                onEarthquakeSelect={(id) => {
+                onEarthquakeSelect={(id: string) => {
                   const earthquake = filteredEarthquakes.find((e) => e.id === id);
                   if (earthquake) {
                     setSelectedEarthquake(earthquake);
@@ -245,7 +277,7 @@ const App: React.FC = () => {
               />
             ) : (
               <EarthquakeMap
-                onEarthquakeSelect={(id) => {
+                onEarthquakeSelect={(id: string) => {
                   const earthquake = filteredEarthquakes.find((e) => e.id === id);
                   if (earthquake) {
                     setSelectedEarthquake(earthquake);
@@ -409,45 +441,45 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 24,
-    gap: 24,
+    padding: 12,
+    gap: 16,
   },
-  magnitudeCircle: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+  magnitudeContainer: {
+    width: 120,
+    minHeight: 90,
     justifyContent: 'center',
     alignItems: 'center',
   },
   magnitudeText: {
-    fontSize: 33,
-    fontWeight: 'bold',
-    color: 'white',
+    fontSize: 78,
+    fontWeight: '900',
   },
   bannerInfo: {
     flex: 1,
     justifyContent: 'center',
   },
   bannerLocation: {
-    fontSize: 27,
+    fontSize: 25,
+    lineHeight: 28,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 9,
+    marginBottom: 4,
   },
   bannerStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
   },
   bannerMagnitude: {
-    fontSize: 21,
+    fontSize: 18,
     fontWeight: '700',
   },
   bannerDivider: {
-    marginHorizontal: 8,
+    marginHorizontal: 6,
     color: '#ccc',
   },
   bannerDistance: {
-    fontSize: 21,
+    fontSize: 18,
     color: '#666',
   },
   listContainerFull: {

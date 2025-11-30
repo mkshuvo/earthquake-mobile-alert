@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useEarthquakeStore } from '../store/earthquakeStore';
+import { formatMagnitude, useEarthquakeStore } from '../store/earthquakeStore';
 
 declare const window: any;
 declare const document: any;
@@ -25,10 +25,9 @@ export const EarthquakeMapWeb: React.FC<EarthquakeMapWebProps> = ({ onEarthquake
             lat: position.coords.latitude,
             lng: position.coords.longitude,
           };
-          console.log('[EarthquakeMapWeb] User location:', position.coords.latitude, position.coords.longitude);
         },
         (error: any) => {
-          console.warn('[EarthquakeMapWeb] Failed to get user location:', error.message);
+          // Failed to get user location
         }
       );
     }
@@ -52,7 +51,7 @@ export const EarthquakeMapWeb: React.FC<EarthquakeMapWebProps> = ({ onEarthquake
         };
         document.head.appendChild(script);
       } catch (error) {
-        console.error('Failed to load Leaflet:', error);
+        // Failed to load Leaflet
       }
     };
 
@@ -115,23 +114,30 @@ export const EarthquakeMapWeb: React.FC<EarthquakeMapWebProps> = ({ onEarthquake
 
       // Add earthquake markers
       filteredEarthquakes.forEach((earthquake) => {
-        const color = getMagnitudeColor(earthquake.magnitude);
+        if (!earthquake || !earthquake.location) return;
+
+        const magnitude = Number(earthquake.magnitude) || 0;
+        const depth = Number(earthquake.depth) || 0;
+        const lat = Number(earthquake.location.latitude) || 0;
+        const lng = Number(earthquake.location.longitude) || 0;
+
+        const color = getMagnitudeColor(magnitude);
         
         // Create circle for ripple effect
         L.circle(
-          [earthquake.location.latitude, earthquake.location.longitude],
+          [lat, lng],
           {
             color: color,
             fillColor: color,
             fillOpacity: 0.2,
-            radius: Math.pow(10, earthquake.magnitude) * 1000,
+            radius: Math.pow(1.8, magnitude) * 1000, // Reduced from Math.pow(10, magnitude)
             weight: 2,
           }
         ).addTo(map);
 
         // Create marker with magnitude
         const marker = L.circleMarker(
-          [earthquake.location.latitude, earthquake.location.longitude],
+          [lat, lng],
           {
             radius: 20,
             fillColor: color,
@@ -145,9 +151,9 @@ export const EarthquakeMapWeb: React.FC<EarthquakeMapWebProps> = ({ onEarthquake
         // Add popup with earthquake details
         const popup = L.popup().setContent(
           `<div style="font-size: 14px; width: 200px;">
-            <strong>${earthquake.magnitude.toFixed(1)}M</strong><br/>
-            ${earthquake.location.place}<br/>
-            Depth: ${earthquake.depth.toFixed(1)} km<br/>
+            <strong>${formatMagnitude(magnitude)}M</strong><br/>
+            ${earthquake.location.place || 'Unknown Location'}<br/>
+            Depth: ${depth.toFixed(1)} km<br/>
             <button onclick="window.earthquakeSelect('${earthquake.id}')" 
               style="margin-top: 8px; padding: 6px 12px; background: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer;">
               View Details
@@ -162,7 +168,7 @@ export const EarthquakeMapWeb: React.FC<EarthquakeMapWebProps> = ({ onEarthquake
 
         // Add magnitude text to marker
         const label = L.divIcon({
-          html: `<div style="font-size: 16px; font-weight: bold; color: white;">${earthquake.magnitude.toFixed(1)}</div>`,
+          html: `<div style="font-size: 16px; font-weight: bold; color: white;">${formatMagnitude(magnitude)}</div>`,
           iconSize: [40, 40],
           className: 'earthquake-label',
         });

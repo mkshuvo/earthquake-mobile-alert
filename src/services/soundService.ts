@@ -21,7 +21,7 @@ class SoundService {
       );
       this.sound = sound;
     } catch (error) {
-      console.warn('[SoundService] Failed to load sound', error);
+      // Failed to load sound
     }
   }
 
@@ -31,22 +31,20 @@ class SoundService {
         await this.loadSound();
       }
       if (this.sound) {
-        console.log('[SoundService] Playing alert sound...');
         await this.sound.setIsLoopingAsync(true);
         await this.sound.playAsync();
       }
     } catch (e) {
-      console.error('[SoundService] Play error', e);
+      // Play error
     }
   }
 
   async stopAlert() {
     if (this.sound) {
       try {
-        console.log('[SoundService] Stopping alert sound...');
         await this.sound.stopAsync();
       } catch (e) {
-        console.error('[SoundService] Stop error', e);
+        // Stop error
       }
     }
   }

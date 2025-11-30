@@ -1,15 +1,15 @@
 import React, { useEffect, useRef } from 'react';
 import {
-    ActivityIndicator,
-    Dimensions,
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Dimensions,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useEarthquakeStore } from '../store/earthquakeStore';
+import { formatMagnitude, useEarthquakeStore } from '../store/earthquakeStore';
 
 declare const navigator: any;
 declare module 'react-native-vector-icons/MaterialCommunityIcons';
@@ -37,7 +37,7 @@ export const EarthquakeMap: React.FC<EarthquakeMapProps> = ({
       Marker = maps.Marker;
       PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
     } catch (error) {
-      console.warn('Failed to load react-native-maps', error);
+      // Failed to load react-native-maps
     }
   }
 
@@ -70,7 +70,7 @@ export const EarthquakeMap: React.FC<EarthquakeMapProps> = ({
           }
         },
         (error: any) => {
-          console.log('Location error:', error);
+          // Location error
         },
       );
     }
@@ -102,7 +102,7 @@ export const EarthquakeMap: React.FC<EarthquakeMapProps> = ({
   };
 
   const getCircleRadius = (magnitude: number): number => {
-    return 20000 + magnitude * 15000; // Radius in meters
+    return 5000 + magnitude * 2000; // Significantly reduced from 20000 + mag * 15000
   };
 
   // Render web placeholder
@@ -143,44 +143,51 @@ export const EarthquakeMap: React.FC<EarthquakeMapProps> = ({
         followsUserLocation={false}
       >
         {/* Earthquake markers */}
-        {filteredEarthquakes.map((earthquake) => (
-          <React.Fragment key={earthquake.id}>
-            {/* Circle ripple effect */}
-            <Circle
-              center={{
-                latitude: earthquake.location.latitude,
-                longitude: earthquake.location.longitude,
-              }}
-              radius={getCircleRadius(earthquake.magnitude)}
-              fillColor={`${getMagnitudeColor(earthquake.magnitude)}33`}
-              strokeColor={getMagnitudeColor(earthquake.magnitude)}
-              strokeWidth={2}
-            />
+        {filteredEarthquakes.map((earthquake) => {
+          if (!earthquake || !earthquake.location) return null;
+          const magnitude = Number(earthquake.magnitude) || 0;
+          const lat = Number(earthquake.location.latitude) || 0;
+          const lng = Number(earthquake.location.longitude) || 0;
+          
+          return (
+            <React.Fragment key={earthquake.id}>
+              {/* Circle ripple effect */}
+              <Circle
+                center={{
+                  latitude: lat,
+                  longitude: lng,
+                }}
+                radius={getCircleRadius(magnitude)}
+                fillColor={`${getMagnitudeColor(magnitude)}33`}
+                strokeColor={getMagnitudeColor(magnitude)}
+                strokeWidth={2}
+              />
 
-            {/* Magnitude marker */}
-            <Marker
-              coordinate={{
-                latitude: earthquake.location.latitude,
-                longitude: earthquake.location.longitude,
-              }}
-              onPress={() => onEarthquakeSelect(earthquake.id)}
-            >
-              <TouchableOpacity
-                style={[
-                  styles.markerButton,
-                  { backgroundColor: getMagnitudeColor(earthquake.magnitude) },
-                ]}
-                activeOpacity={0.7}
+              {/* Magnitude marker */}
+              <Marker
+                coordinate={{
+                  latitude: lat,
+                  longitude: lng,
+                }}
+                onPress={() => onEarthquakeSelect(earthquake.id)}
               >
-                <Text
-                style={styles.magnitudeText}
-              >
-                {(earthquake.magnitude).toFixed(1)}
-              </Text>
-              </TouchableOpacity>
-            </Marker>
-          </React.Fragment>
-        ))}
+                <TouchableOpacity
+                  style={[
+                    styles.markerButton,
+                    { backgroundColor: getMagnitudeColor(magnitude) },
+                  ]}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                  style={styles.magnitudeText}
+                >
+                  {formatMagnitude(magnitude)}
+                </Text>
+                </TouchableOpacity>
+              </Marker>
+            </React.Fragment>
+          );
+        })}
 
         {/* User location marker */}
         {userLocation && (
