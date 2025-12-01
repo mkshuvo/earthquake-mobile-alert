@@ -14,6 +14,7 @@ import {
   View
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import notificationService from '../services/notificationService';
 import { BottomNavigation, TabName } from './components/BottomNavigation';
 import { EarthquakeCard } from './components/EarthquakeCard';
 import { EarthquakeMap } from './components/EarthquakeMap';
@@ -24,7 +25,7 @@ import { earthquakeService } from './services/earthquakeService';
 import { formatMagnitude, useEarthquakeStore } from './store/earthquakeStore';
 
 LogBox.ignoreLogs([
-  'Require cycle:', 
+  'Require cycle:',
   'Non-serializable values were found in the navigation state',
 ]);
 
@@ -52,6 +53,11 @@ const App: React.FC = () => {
     loadInitialData();
     connectWebSocket();
     requestLocationPermission();
+
+    // Connect to MQTT for push notifications and updates
+    // Using WebSocket port 8083 as defined in docker-compose
+    notificationService.connectToMQTT('ws://localhost:8083/mqtt', 'mobile-app-' + Math.random().toString(16).substr(2, 8))
+      .catch((err: any) => console.error('Failed to connect to MQTT:', err));
   }, []);
 
   const requestLocationPermission = async () => {
@@ -145,7 +151,7 @@ const App: React.FC = () => {
         return (
           <View style={styles.tabContent}>
             <Text style={styles.tabText}>Safety Tips & Emergency Procedures</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={{ marginTop: 20, padding: 15, backgroundColor: '#F44336', borderRadius: 8 }}
               onPress={() => {
                 const mockEarthquake = {
@@ -194,19 +200,19 @@ const App: React.FC = () => {
     if (!filteredEarthquakes.length) return null;
     const nearest = filteredEarthquakes[0]; // Sorted by proximity
     const magnitudeColor = getMagnitudeColor(nearest.magnitude);
-    
+
     return (
       <View style={styles.locationBanner}>
         <View style={[styles.bannerContainer, { shadowColor: magnitudeColor }]}>
           {/* Left Color Bar */}
           <View style={[styles.leftBar, { backgroundColor: magnitudeColor }]} />
-          
+
           <View style={styles.bannerContent}>
             <View style={styles.magnitudeContainer}>
               {nearest.magnitude >= 8.0 ? (
                 <MaterialCommunityIcons name="alert-octagram" size={84} color={magnitudeColor} />
               ) : (
-                <Text 
+                <Text
                   style={[styles.magnitudeText, { color: magnitudeColor }]}
                   adjustsFontSizeToFit
                   numberOfLines={1}
@@ -216,9 +222,9 @@ const App: React.FC = () => {
               )}
             </View>
             <View style={styles.bannerInfo}>
-              <Text 
-                style={styles.bannerLocation} 
-                numberOfLines={3} 
+              <Text
+                style={styles.bannerLocation}
+                numberOfLines={3}
                 ellipsizeMode="tail"
                 adjustsFontSizeToFit
                 minimumFontScale={0.6}
@@ -285,7 +291,7 @@ const App: React.FC = () => {
                 }}
               />
             )}
-            
+
             {/* Earthquake Detail Card Overlay - Only on native */}
             {Platform.OS !== 'web' && filteredEarthquakes.length > 0 && (
               <View style={styles.cardOverlay}>
@@ -296,7 +302,7 @@ const App: React.FC = () => {
               </View>
             )}
           </View>
-          
+
           {/* Latest Earthquake Banner Below Map */}
           {renderLocationBanner()}
         </View>

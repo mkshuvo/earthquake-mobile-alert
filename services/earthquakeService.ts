@@ -1,9 +1,11 @@
 import axios from 'axios';
+import { io, Socket } from 'socket.io-client';
 import { EarthquakeEvent } from '../types/earthquake';
 
 class EarthquakeService {
-  private readonly baseURL = 'http://localhost:3000'; // Your earthquake server URL
+  private readonly baseURL = 'http://localhost:51763'; // Updated to match exposed Docker port
   private readonly usgsURL = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary';
+  private socket: Socket | null = null;
 
   async getRecentEarthquakes(limit: number = 50): Promise<EarthquakeEvent[]> {
     try {
@@ -12,12 +14,54 @@ class EarthquakeService {
         params: { limit },
         timeout: 5000,
       });
-      
+
       return this.transformEarthquakeData(response.data);
     } catch (error) {
       console.warn('Local server unavailable, falling back to USGS API');
       // Fallback to USGS API directly
       return this.getFromUSGS();
+    }
+  }
+
+  connectWebSocket(callbacks: {
+    onConnect: () => void;
+    onDisconnect: () => void;
+    onNewEarthquake: (earthquake: EarthquakeEvent) => void;
+    onError: (error: string) => void;
+  }) {
+    if (this.socket?.connected) return;
+
+    this.socket = io(this.baseURL, {
+      transports: ['websocket'],
+      reconnection: true,
+    });
+
+    this.socket.on('connect', () => {
+      console.log('Connected to WebSocket server');
+      callbacks.onConnect();
+      this.socket?.emit('subscribe-earthquakes');
+    });
+
+    this.socket.on('disconnect', () => {
+      console.log('Disconnected from WebSocket server');
+      callbacks.onDisconnect();
+    });
+
+    this.socket.on('connect_error', (err) => {
+      console.error('WebSocket connection error:', err);
+      callbacks.onError(err.message);
+    });
+
+    this.socket.on('new-earthquake', (earthquake: EarthquakeEvent) => {
+      console.log('New earthquake received via WebSocket:', earthquake.id);
+      callbacks.onNewEarthquake(earthquake);
+    });
+  }
+
+  disconnectWebSocket() {
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
     }
   }
 
@@ -82,9 +126,9 @@ class EarthquakeService {
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos(this.toRadians(lat1)) *
-        Math.cos(this.toRadians(lat2)) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
+      Math.cos(this.toRadians(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }

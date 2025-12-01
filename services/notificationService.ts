@@ -1,7 +1,8 @@
-import { Alert, Platform } from 'react-native';
+import { Alert } from 'react-native';
 import { EarthquakeEvent, NotificationSettings } from '../types/earthquake';
 // MQTT client for push notifications
-import mqtt from 'react-native-paho-mqtt';
+import mqtt from 'mqtt';
+import { useEarthquakeStore } from '../store/earthquakeStore';
 
 class NotificationService {
   private mqttClient: any = null;
@@ -97,9 +98,8 @@ class NotificationService {
 
     const priority = this.getPriorityLevel(earthquake.magnitude);
     const title = `🌍 Earthquake Alert - M${earthquake.magnitude}`;
-    const message = `${earthquake.location.place}\nDepth: ${earthquake.depth}km${
-      earthquake.distance ? `\nDistance: ${Math.round(earthquake.distance)}km` : ''
-    }`;
+    const message = `${earthquake.location.place}\nDepth: ${earthquake.depth}km${earthquake.distance ? `\nDistance: ${Math.round(earthquake.distance)}km` : ''
+      }`;
 
     // Show immediate alert for high priority earthquakes
     if (priority === 'high' || priority === 'critical') {
@@ -183,10 +183,16 @@ class NotificationService {
     try {
       const earthquakeData = JSON.parse(message.toString());
       const { title, body, data } = earthquakeData;
-      
+
+      // Update store with new earthquake data
+      if (data) {
+        console.log('Updating store with MQTT earthquake data:', data.id);
+        useEarthquakeStore.getState().addEarthquake(data);
+      }
+
       // Show notification based on topic priority
       const priority = topic.split('/').pop() || 'medium'; // Extract priority from topic
-      
+
       // For critical and high priority, show immediate alert
       if (priority === 'critical' || priority === 'high') {
         Alert.alert(
@@ -208,10 +214,10 @@ class NotificationService {
         // For medium and low priority, show as banner notification
         console.log(`Earthquake notification: ${title} - ${body}`);
       }
-      
+
       // Trigger haptic feedback based on priority
       this.triggerVibration(priority as 'low' | 'medium' | 'high' | 'critical');
-      
+
     } catch (error) {
       console.error('Error handling MQTT message:', error);
     }

@@ -7,7 +7,7 @@ export interface EarthquakeEvent {
     place: string;
   };
   depth: number;
-  timestamp: Date;
+  timestamp: Date | string;
   url: string;
   alert: string | null;
   tsunami: number;
